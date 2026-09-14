@@ -21,3 +21,9 @@ uint16_t adc_read(uint8_t chan) {
 	while (ADCSRA & (1 << ADSC)); //waits for adc working bit to be off
 	return ADC; // returns the value
 }
+
+uint16_t adc_convert_mv(uint16_t uvalue){
+	
+return	(uint32_t)uvalue * 5000/1024; // scale raw ADC count to mV (Vref = 5V) 
+	
+}
