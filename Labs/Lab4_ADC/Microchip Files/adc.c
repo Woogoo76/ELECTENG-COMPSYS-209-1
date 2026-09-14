@@ -15,4 +15,9 @@ void adc_init() {
 
 uint16_t adc_read(uint8_t chan) {
 //Code written in Part 3 goes here
+	chan &= 0x07; 
+	ADMUX = (ADMUX & 0xF0) | chan; //selects the channel, but keeps top 4 bits (REFS1:0,ADLAR,reserved bit)
+	ADCSRA |= (1<< ADSC); //enables adc working bit
+	while (ADCSRA & (1 << ADSC)); //waits for adc working bit to be off
+	return ADC; // returns the value
 }
