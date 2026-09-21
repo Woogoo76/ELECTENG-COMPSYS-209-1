@@ -11,20 +11,29 @@
 #include <avr/interrupt.h>
 #include <stdint.h>
 
+volatile uint16_t timer_value = 0;
+volatile uint8_t measurement_complete = 0;
 
-uint8_t counter = 0;
 void timer0_init(){
-	//TODO: initialise and configure timer0 to count to 10ms
-	TCCR0A = (1 << WGM01);
-	TCCR0B = (1 << CS02);
-	OCR0A = 78;
-	TIMSK0 |= (1 << OCIE0A);
+	// Initialise and configure timer
+	TCCR1A = 0;
 }
 
-ISR(TIMER0_COMPA_vect) {
-	counter++;
-	if(counter == 10){
-		led_toggle();
-		counter = 0;
+void int0_init(void) {
+	DDRD &= ~(1 << DDD2);
+	PORTD |= (1 << PORTD2);
+	EICRA |= (1 << ISC00);
+	EICRA &= ~(1 << ISC01);
+	EIMSK |= (1 << INT0);
+}
+
+ISR(INT0_vect) {
+	if (PIND & (1 << PD2)) {
+		TCNT1 = 0;
+		TCCR1B |= (1 << CS12);
+	} else {
+		TCCR1B &= ~((1 << CS12) | (1 << CS11) | (1 << CS10));
+		timer_value = TCNT1;
+		measurement_complete = 1;
 	}
 }
