@@ -8,83 +8,66 @@
 
 #define F_CPU 2000000UL
 #include <avr/io.h>
-#include <avr/interrupt.h>
 #include <util/delay.h>
 
-#define DS1_PIN PB0
-#define DS2_PIN PB1
-#define SG_PIN  PB4
-#define PB_PIN  PB7
+// Shift Register Control Pins (PORTC)
+#define SH_CP_PIN PC3
+#define SH_DS_PIN PC4
+#define SH_ST_PIN PC5
+
+// Digit Enable Pins (PORTD)
+#define DS1_PIN PD4
+#define DS2_PIN PD5
+#define DS3_PIN PD6
+#define DS4_PIN PD7
 
 const uint8_t seg_pattern[10] = {
 	0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
 };
 
-static volatile uint8_t counter = 0;
-static volatile uint8_t active_digit = 0;
+void init_display(void) {
+	// Configure shift register control pins (PC3, PC4, PC5) as outputs
+	DDRC |= (1 << SH_CP_PIN) | (1 << SH_DS_PIN) | (1 << SH_ST_PIN);
 
-void init_io(void) {
-	DDRC |= 0x3F;
-	DDRB |= (1 << DS1_PIN) | (1 << DS2_PIN) | (1 << SG_PIN);
-	DDRB &= ~(1 << PB_PIN);
-	PORTB |= (1 << PB_PIN);
-	
-	PORTB |= (1 << DS1_PIN) | (1 << DS2_PIN);
+	// Configure digit enable pins (PD4, PD5, PD6, PD7) as outputs
+	DDRD |= (1 << DS1_PIN) | (1 << DS2_PIN) | (1 << DS3_PIN) | (1 << DS4_PIN);
+
+	// Set Ds1, Ds2, Ds3 = 1 (disabled) and Ds4 = 0 (enabled)
+	PORTD |= (1 << DS1_PIN) | (1 << DS2_PIN) | (1 << DS3_PIN);
+	PORTD &= ~(1 << DS4_PIN);
 }
 
-void timer0_init(void) {
-	TCCR0A = (1 << WGM01);
-	TCCR0B = (1 << CS02) | (1 << CS00);
-	OCR0A = 155;
-	TIMSK0 = (1 << OCIE0A);
-}
+void send_next_character_to_display(void) {
+	// 1. Ensure SH_CP and SH_ST are both set to 0
+	PORTC &= ~((1 << SH_CP_PIN) | (1 << SH_ST_PIN));
 
-ISR(TIMER0_COMPA_vect) {
-	uint8_t digit_val = (active_digit == 0) ? (counter / 10) : (counter % 10);
-	uint8_t pattern = seg_pattern[digit_val];
+	// 2. Get bit pattern for number "7"
+	uint8_t pattern = seg_pattern[7];
 
-	PORTB |= (1 << DS1_PIN) | (1 << DS2_PIN);
+	// 3. Shift out 8 bits starting with MSB (dp down to a)
+	for (int8_t i = 7; i >= 0; i--) {
+		if (pattern & (1 << i)) {
+			PORTC |= (1 << SH_DS_PIN);
+			} else {
+			PORTC &= ~(1 << SH_DS_PIN);
+		}
 
-	PORTC = (PORTC & 0xC0) | (pattern & 0x3F);
-	if (pattern & (1 << 6)) {
-		PORTB |= (1 << SG_PIN);
-		} else {
-		PORTB &= ~(1 << SG_PIN);
+		// Toggle SH_CP High then Low to shift bit
+		PORTC |= (1 << SH_CP_PIN);
+		PORTC &= ~(1 << SH_CP_PIN);
 	}
 
-	if (active_digit == 0) {
-		PORTB &= ~(1 << DS1_PIN);
-		active_digit = 1;
-		} else {
-		PORTB &= ~(1 << DS2_PIN);
-		active_digit = 0;
-	}
+	// 4. Toggle SH_ST High then Low to latch data to outputs
+	PORTC |= (1 << SH_ST_PIN);
+	PORTC &= ~(1 << SH_ST_PIN);
 }
 
 int main(void) {
-	init_io();
-	timer0_init();
-	sei();
+	init_display();
+	send_next_character_to_display();
 
 	while (1) {
-		uint8_t button_pressed = 0;
-
-		for (uint8_t i = 0; i < 10; i++) {
-			_delay_ms(100);
-			if (!(PINB & (1 << PB_PIN))) {
-				button_pressed = 1;
-				break;
-			}
-		}
-
-		if (button_pressed) {
-			counter = 0;
-			} else {
-			counter++;
-			if (counter > 99) {
-				counter = 0;
-			}
-		}
+		// Hold static display
 	}
 
 	return 0;
