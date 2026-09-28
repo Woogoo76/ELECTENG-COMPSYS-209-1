@@ -8,6 +8,7 @@
 
 #define F_CPU 2000000UL
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <util/delay.h>
 
 #define DS1_PIN PB0
@@ -19,36 +20,53 @@ const uint8_t seg_pattern[10] = {
 	0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F
 };
 
-void display_digit(uint8_t digit) {
-	if (digit > 9) return;
-
-	uint8_t pattern = seg_pattern[digit];
-
-	PORTC = (PORTC & 0xC0) | (pattern & 0x3F);
-
-	if (pattern & (1 << 6)) {
-		PORTB |= (1 << SG_PIN);
-		} else {
-		PORTB &= ~(1 << SG_PIN);
-	}
-}
+static volatile uint8_t counter = 0;
+static volatile uint8_t active_digit = 0;
 
 void init_io(void) {
 	DDRC |= 0x3F;
 	DDRB |= (1 << DS1_PIN) | (1 << DS2_PIN) | (1 << SG_PIN);
 	DDRB &= ~(1 << PB_PIN);
 	PORTB |= (1 << PB_PIN);
+	
+	PORTB |= (1 << DS1_PIN) | (1 << DS2_PIN);
+}
 
-	PORTB |= (1 << DS1_PIN);
-	PORTB &= ~(1 << DS2_PIN);
+void timer0_init(void) {
+	TCCR0A = (1 << WGM01);
+	TCCR0B = (1 << CS02) | (1 << CS00);
+	OCR0A = 155;
+	TIMSK0 = (1 << OCIE0A);
+}
+
+ISR(TIMER0_COMPA_vect) {
+	uint8_t digit_val = (active_digit == 0) ? (counter / 10) : (counter % 10);
+	uint8_t pattern = seg_pattern[digit_val];
+
+	PORTB |= (1 << DS1_PIN) | (1 << DS2_PIN);
+
+	PORTC = (PORTC & 0xC0) | (pattern & 0x3F);
+	if (pattern & (1 << 6)) {
+		PORTB |= (1 << SG_PIN);
+		} else {
+		PORTB &= ~(1 << SG_PIN);
+	}
+
+	if (active_digit == 0) {
+		PORTB &= ~(1 << DS1_PIN);
+		active_digit = 1;
+		} else {
+		PORTB &= ~(1 << DS2_PIN);
+		active_digit = 0;
+	}
 }
 
 int main(void) {
 	init_io();
-	uint8_t counter = 0;
+	timer0_init();
+	sei();
 
 	while (1) {
-		display_digit(counter);
 		uint8_t button_pressed = 0;
 
 		for (uint8_t i = 0; i < 10; i++) {
@@ -63,7 +81,7 @@ int main(void) {
 			counter = 0;
 			} else {
 			counter++;
-			if (counter > 9) {
+			if (counter > 99) {
 				counter = 0;
 			}
 		}
